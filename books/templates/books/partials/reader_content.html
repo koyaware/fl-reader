@@ -1,0 +1,183 @@
+{% if is_htmx %}
+<nav id="tab-bar" class="hidden" hx-swap-oob="true"></nav>
+{% endif %}
+
+<script>
+window.reader = function(bookId, csrfToken, initialProgress) {
+    return {
+        bookId,
+        csrfToken,
+        fontSize: parseInt(localStorage.getItem('reader_fontSize') || 18),
+        controlsVisible: false,
+        readingProgress: initialProgress,
+        saveTimeout: null,
+        theme: localStorage.getItem('reader_theme') || 'book',
+
+        setTheme(t) {
+            this.theme = t;
+            localStorage.setItem('reader_theme', t);
+        },
+        
+        init() {
+            setTimeout(() => {
+                this.$nextTick(() => {
+                    const el = document.getElementById('reader-scroll');
+                    if (el && this.readingProgress > 0) {
+                        const total = el.scrollHeight - el.clientHeight;
+                        if (total > 0) {
+                            el.scrollTop = (this.readingProgress / 100) * total;
+                        }
+                    }
+                });
+            }, 300);
+        },
+
+        handleScroll(e) {
+            const el = e.target;
+            const scrolled = el.scrollTop;
+            const total = el.scrollHeight - el.clientHeight;
+            if (total > 0) {
+                this.readingProgress = Math.round((scrolled / total) * 100);
+            }
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = setTimeout(() => this.saveProgress(), 2000);
+        },
+
+        handleCenterClick(e) {
+            if (e.target.closest('a')) return;
+            const x = e.clientX;
+            const y = e.clientY;
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            if (x > width * 0.2 && x < width * 0.8 && y > height * 0.2 && y < height * 0.8) {
+                this.controlsVisible = !this.controlsVisible;
+            }
+        },
+
+        saveProgress() {
+            const params = new URLSearchParams({ progress: this.readingProgress });
+            fetch(`/book/${this.bookId}/progress/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': this.csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: params.toString(),
+            });
+        },
+
+        increaseFontSize() {
+            this.fontSize = Math.min(32, this.fontSize + 2);
+            localStorage.setItem('reader_fontSize', this.fontSize);
+        },
+
+        decreaseFontSize() {
+            this.fontSize = Math.max(12, this.fontSize - 2);
+            localStorage.setItem('reader_fontSize', this.fontSize);
+        },
+
+        goBack() {
+            htmx.ajax('GET', '/', {target: '#main-content', swap: 'innerHTML', pushUrl: true});
+        },
+    };
+};
+</script>
+
+<div x-data="reader('{{ book.id }}', '{{ csrf_token }}', {{ book.reading_progress }})"
+     class="reader-container slide-up transition-colors duration-500"
+     :class="{
+         'theme-light': theme === 'light',
+         'theme-sepia': theme === 'sepia'
+     }">
+
+    {% if book.cover %}
+    <div class="absolute inset-0 pointer-events-none transition-all duration-700 z-0 text-white"
+         :style="`opacity: ${theme === 'book' ? '0.25' : '0.1'}; filter: blur(100px) saturate(${theme === 'book' ? '200%' : '100%'})`"
+         :class="theme === 'book' ? 'opacity-25' : 'opacity-10'">
+        <img src="{{ book.cover.url }}" class="w-full h-full object-cover blur-[100px] scale-150" alt="">
+    </div>
+    {% endif %}
+
+    <nav class="absolute top-0 left-0 right-0 z-[110] transition-all duration-500 ease-out -translate-y-full"
+         :class="controlsVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'">
+        <div class="glass mx-4 mt-6 md:mx-auto md:mt-8 px-4 md:px-6 py-3 rounded-full flex items-center justify-between gap-4 md:gap-6 shadow-2xl max-w-lg">
+            <button @click="goBack()"
+                    class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 transition-all flex items-center justify-center active:scale-90 shrink-0 border border-white/5">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="flex flex-col items-center flex-1 min-w-0">
+                <h2 class="text-xs md:text-sm font-bold tracking-tight w-full max-w-[160px] truncate text-center">{{ book.title }}</h2>
+                <span class="text-[9px] md:text-[10px] text-white/50 w-full truncate text-center">{{ book.author }}</span>
+            </div>
+            <div class="w-10 h-10 shrink-0"></div>
+        </div>
+    </nav>
+
+    <div id="reader-scroll"
+         class="reader-scroll-area scroll-smooth"
+         @scroll="handleScroll($event)"
+         @click="handleCenterClick($event)">
+        <div class="reader-text-container transition-all duration-300"
+             :style="`font-size: ${fontSize}px; line-height: 1.8; color: ${theme === 'dark' || theme === 'book' ? 'rgba(255,255,255,0.9)' : 'inherit'};` ">
+
+            <div class="text-center-force mb-16">
+                {% if book.cover %}
+                <div class="w-32 h-44 mx-auto rounded-xl overflow-hidden shadow-2xl mb-8 glass p-1">
+                    <img src="{{ book.cover.url }}" class="w-full h-full object-cover rounded-lg" alt="{{ book.title }}">
+                </div>
+                {% endif %}
+                <h1 class="text-3xl md:text-4xl font-bold mb-4">{{ book.title }}</h1>
+                <p class="text-lg md:text-xl opacity-40 italic">{{ book.author }}</p>
+                <div class="mt-8 w-16 h-px bg-white/20 mx-auto"></div>
+            </div>
+
+            <div class="selection:bg-blue-500/40 opacity-90">
+                {{ content }}
+            </div>
+        </div>
+    </div>
+
+    <footer class="absolute bottom-0 left-0 right-0 z-[110] transition-all duration-500 ease-out translate-y-full"
+            :class="controlsVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'">
+        <div class="glass mx-4 mb-8 md:mx-auto md:mb-10 px-4 md:px-8 py-3 md:py-4 rounded-[32px] md:rounded-full flex flex-col md:flex-row items-center gap-4 md:gap-8 shadow-2xl whitespace-nowrap max-w-2xl">
+            <div class="flex items-center gap-4 md:gap-6">
+                <div class="flex items-center gap-2 border-r border-white/10 pr-4 md:pr-6 shrink-0">
+                    <button @click="decreaseFontSize()"
+                            class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-90 border border-white/5">A</button>
+                    <span class="text-[10px] md:text-xs font-medium w-5 md:w-6 text-center" x-text="fontSize"></span>
+                    <button @click="increaseFontSize()"
+                            class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-lg font-bold transition-all active:scale-90 border border-white/5">A</button>
+                </div>
+
+                <div class="flex items-center gap-2 bg-white/5 p-1 rounded-full border border-white/5">
+                    <button @click="setTheme('dark')" :class="theme === 'dark' ? 'bg-white/20 shadow-lg' : 'hover:bg-white/10'" class="w-8 h-8 rounded-full transition-all flex items-center justify-center text-[10px] font-bold">T</button>
+                    <button @click="setTheme('book')" :class="theme === 'book' ? 'bg-blue-500 shadow-lg shadow-blue-500/20' : 'hover:bg-white/10'" class="w-8 h-8 rounded-full transition-all flex items-center justify-center text-[10px] font-bold">B</button>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4 md:gap-8 flex-1 w-full md:w-auto">
+                <div class="flex items-center gap-2 md:gap-4 border-r border-white/10 pr-4 md:pr-6 shrink-0">
+                    {% include "books/partials/favorite_button.html" %}
+                </div>
+
+                <div class="flex flex-col gap-1.5 md:gap-2 flex-1 md:min-w-[130px]">
+                    <div class="flex justify-between text-[8px] md:text-[10px] font-bold tracking-widest text-white/40 uppercase">
+                        <span class="hidden md:inline">Прогресс</span>
+                        <span x-text="readingProgress + '%'"></span>
+                    </div>
+                    <div class="w-full h-1 md:h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div class="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)] rounded-full transition-all duration-300"
+                             :style="`width: ${readingProgress}%`"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <div class="fixed inset-x-0 top-0 h-32 bg-gradient-to-b from-black to-transparent pointer-events-none z-[50]"></div>
+    <div class="fixed inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black to-transparent pointer-events-none z-[50]"></div>
+</div>
+
+</div>

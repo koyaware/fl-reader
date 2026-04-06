@@ -1,0 +1,5 @@
+{% extends "books/base.html" %}
+{% block title %}{{ book.title }} — Lumina Reader{% endblock %}
+{% block content %}
+{% include "books/partials/reader_content.html" %}
+{% endblock %}

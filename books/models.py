@@ -9,7 +9,9 @@ class Book(models.Model):
     file = models.FileField(upload_to='books/')
     flibusta_id = models.CharField(max_length=100, blank=True, null=True)
     reading_progress = models.IntegerField(default=0)
+    is_favorite = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    last_read_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.title} - {self.author}"

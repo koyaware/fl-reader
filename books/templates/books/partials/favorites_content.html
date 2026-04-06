@@ -1,0 +1,21 @@
+{% include "books/partials/tab_bar.html" %}
+
+<div class="w-full max-w-4xl px-6 py-12 pb-32 fade-in">
+    <header class="flex flex-col gap-6 mb-12">
+        <h1 class="text-3xl font-bold tracking-tight px-2">Избранное</h1>
+        
+        <p class="text-white/50 px-2 text-sm">Книги, которые вы отметили как любимые.</p>
+    </header>
+
+    {% if books %}
+        {% include "books/partials/book_grid.html" %}
+    {% else %}
+        <div class="flex flex-col items-center justify-center py-20 opacity-30">
+            <svg class="w-16 h-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+            </svg>
+            <p class="text-lg font-medium">Здесь пока пусто</p>
+            <p class="text-sm">Добавляйте книги в избранное во время чтения</p>
+        </div>
+    {% endif %}
+</div>

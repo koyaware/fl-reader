@@ -1,0 +1,59 @@
+{% if error %}
+    <div class="flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z"/>
+        </svg>
+        {{ error }}
+    </div>
+{% elif not query %}
+    <p class="text-white/30 text-sm text-center py-4">Введите запрос для поиска на Флибусте</p>
+{% elif results %}
+    <div class="flex items-center justify-between mb-4 bg-[#0d0d0f] sticky top-0 py-2 z-10">
+        <p class="text-xs text-white/40 uppercase tracking-wider">Найдено: {{ results|length }}</p>
+        <button onclick="document.getElementById('flibusta-results').innerHTML = ''; document.getElementById('flibusta-search-form').reset();" 
+                class="text-xs font-medium bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full text-white/60 hover:text-white transition-colors flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Очистить
+        </button>
+    </div>
+    <div class="space-y-2 max-h-96 overflow-y-auto pr-1">
+        {% for result in results %}
+        <div class="flex items-center justify-between gap-4 p-3 rounded-2xl glass hover:bg-white/5 transition-all group relative">
+            <div class="min-w-0 flex-1 relative z-10">
+                <p class="text-sm font-medium truncate text-white group-hover:text-blue-300 transition-colors" title="{{ result.title }}">{{ result.title }}</p>
+                <p class="text-xs text-white/40 truncate">{{ result.author }}</p>
+            </div>
+            <button id="dl-btn-{{ result.id }}"
+                    class="shrink-0 px-4 py-2 bg-blue-600/80 hover:bg-blue-500 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 whitespace-nowrap relative z-10"
+                    hx-post="{% url 'books:download' %}"
+                    hx-vals='{"flibusta_id": "{{ result.id }}"}'
+                    hx-target="#book-grid"
+                    hx-swap="afterbegin"
+                    hx-indicator="#indicator-{{ result.id }}"
+                    hx-disabled-elt="this">
+                <span id="indicator-{{ result.id }}" class="htmx-indicator">
+                    <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                </span>
+                <span class="[&.htmx-request]:hidden flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    Скачать
+                </span>
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="flex flex-col items-center py-8 opacity-40">
+        <svg class="w-10 h-10 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 3a9 9 0 100 18A9 9 0 0012 3z"/>
+        </svg>
+        <p class="text-sm">По запросу «{{ query }}» ничего не найдено</p>
+    </div>
+{% endif %}
