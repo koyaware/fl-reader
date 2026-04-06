@@ -1,0 +1,7 @@
+Django==6.0.3
+requests[socks]
+PySocks
+lxml
+Pillow
+beautifulsoup4
+python-decouple
