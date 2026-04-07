@@ -4,14 +4,14 @@ from . import views
 app_name = 'books'
 
 urlpatterns = [
-    path('', views.IndexView.as_view(), name='index'),
-    path('favorites/', views.FavoritesView.as_view(), name='favorites'),
-    path('last-read/', views.LastReadRedirectView.as_view(), name='last_read'),
-    path('book/<uuid:pk>/', views.BookDetailView.as_view(), name='book_detail'),
-    path('book/<uuid:pk>/progress/', views.UpdateProgressView.as_view(), name='update_progress'),
-    path('book/<uuid:pk>/favorite/', views.ToggleFavoriteView.as_view(), name='toggle_favorite'),
-    path('book/<uuid:pk>/delete/', views.DeleteBookView.as_view(), name='delete_book'),
-    path('search/', views.SearchView.as_view(), name='search'),
-    path('library/search/', views.LibrarySearchView.as_view(), name='library_search'),
-    path('download/', views.DownloadView.as_view(), name='download'),
+    path('', views.library_view, name='library'),
+    path('last-read/', views.last_read_view, name='last_read'),
+    path('book/<uuid:book_id>/', views.book_detail_view, name='book_detail'),
+    path('book/<uuid:book_id>/progress/', views.update_progress_view, name='update_progress'),
+    path('search/', views.search_view, name='search'),
+    path('download/', views.download_book_view, name='download'),
+    path('book/<uuid:book_id>/delete/', views.delete_book_view, name='delete_book'),
+    path('offline/', views.offline_view, name='offline'),
+    path('sitemap.xml', views.sitemap_view, name='sitemap'),
+    path('robots.txt', views.robots_view, name='robots'),
 ]

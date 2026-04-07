@@ -1,106 +1,199 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Lumina Reader — читайте книги онлайн">
-    <title>{% block title %}Lumina Reader{% endblock %}</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>{% block title %}Lumina Reader - Онлайн библиотека для чтения книг{% endblock %}</title>
+
+    <meta name="description" content="{% block description %}Lumina Reader - современная веб-библиотека для чтения книг онлайн. Скачивайте книги с Флибусты, читайте в удобном интерфейсе с сохранением прогресса и настройкой отображения.{% endblock %}">
+    <meta name="keywords" content="{% block keywords %}читать книги онлайн, веб-библиотека, флибуста, fb2, электронные книги, онлайн ридер, lumina reader{% endblock %}">
+    <meta name="author" content="Lumina Reader">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="{% block canonical %}{{ request.build_absolute_uri }}{% endblock %}">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'icons/favicon-32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'icons/favicon-16.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'icons/apple-touch-icon.png' %}">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Lumina">
+
+    <!-- Android PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}Lumina Reader - Онлайн библиотека для чтения книг{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Современная веб-библиотека для чтения книг онлайн с удобным интерфейсом и сохранением прогресса{% endblock %}">
+    <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
+    <meta property="og:site_name" content="Lumina Reader">
+    <meta property="og:locale" content="ru_RU">
+    {% block og_image %}
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'favicon.svg' %}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    {% endblock %}
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}Lumina Reader - Онлайн библиотека{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}Читайте книги онлайн с удобным интерфейсом и сохранением прогресса{% endblock %}">
+    {% block twitter_image %}
+    <meta name="twitter:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'favicon.svg' %}">
+    {% endblock %}
+
+    <meta name="theme-color" content="#000000">
+    <meta name="color-scheme" content="dark">
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link href="{% static 'css/output.css' %}" rel="stylesheet">
+    <script src="{% static 'js/htmx.min.js' %}"></script>
 
-    <style>
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 0; background: #000; }
-        .glass {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(3px) saturate(120%);
-            -webkit-backdrop-filter: blur(3px) saturate(120%);
-            border: 1px solid rgba(255,255,255,0.05);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    {% block structured_data %}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Lumina Reader",
+        "description": "Онлайн библиотека для чтения книг",
+        "url": "{{ request.scheme }}://{{ request.get_host }}",
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": "{{ request.scheme }}://{{ request.get_host }}/search/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
         }
-        .specular-highlight::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 40%);
-            pointer-events: none;
-            border-radius: inherit;
-        }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-        .theme-light { background-color: #fcfcfc !important; color: #1a1a1a !important; }
-        .theme-light .glass { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.1); color: #1a1a1a; }
-        .theme-light .text-white\/90 { color: #1a1a1a !important; }
-        .theme-light .text-white\/40 { color: #1a1a1a / 50% !important; }
-        
-        .theme-sepia { background-color: #f4ecd8 !important; color: #433422 !important; }
-        .theme-sepia .glass { background: rgba(67, 52, 34, 0.05); border-color: rgba(67, 52, 34, 0.1); color: #433422; }
-        .theme-sepia .text-white\/90 { color: #433422 !important; }
-        .theme-sepia .text-white\/40 { color: #433422 / 50% !important; }
+    }
+    </script>
+    {% endblock %}
 
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        /* Критические стили ридера (чтобы не зависеть от CDN) */
-        .reader-container {
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background-color: #0d0d0f;
-            color: white;
-        }
-        .reader-scroll-area {
-            position: absolute;
-            inset: 0;
-            overflow-y: auto;
-            padding-top: 8rem;
-            padding-bottom: 12rem;
-            z-index: 10;
-        }
-        .reader-text-container {
-            max-width: 42rem;
-            margin-left: auto;
-            margin-right: auto;
-            width: 100%;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
-        }
-        @media (min-width: 768px) {
-            .reader-text-container {
-                padding-left: 3rem;
-                padding-right: 3rem;
-            }
-        }
-        .text-center-force { text-align: center; }
-
-        .htmx-indicator { display: none; }
-        .htmx-request .htmx-indicator { display: inline-flex; }
-        .htmx-request.htmx-indicator { display: inline-flex; }
-    </style>
+    {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-black text-white overflow-x-hidden selection:bg-blue-500/30"
-      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<body class="bg-black text-white overflow-x-hidden selection:bg-blue-500/30">
+
+    <div id="messages"></div>
 
     <div id="root" class="relative min-h-screen w-full">
         <div class="fixed inset-0 z-0 bg-black pointer-events-none"></div>
 
-        <main id="main-content" class="relative z-10 w-full min-h-screen flex flex-col items-center">
+        <main id="main-content" class="relative z-10 w-full min-h-screen" hx-history-elt>
             {% block content %}{% endblock %}
         </main>
-
-        {% include "books/partials/tab_bar.html" %}
     </div>
 
-    <!-- Safelist динамических классов для ридера, чтобы Tailwind CDN скомпилировал их при первой загрузке -->
-    <div class="hidden text-white/80 leading-[1.9] text-justify tracking-wide mb-6 mt-12 mb-12 text-center text-3xl md:text-4xl font-bold text-white/90 text-2xl opacity-70 italic border-l-4 border-white/20 pl-4"></div>
+    <script>
+        document.body.addEventListener('htmx:configRequest', (event) => {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+    </script>
+
+    <script defer>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('flibusta', {
+                modalOpen: false
+            });
+
+            Alpine.store('reader', {
+                fontSize: 18,
+                scrollProgress: 0,
+                isControlsVisible: true
+            });
+
+            console.log('Alpine.js initialized with stores:', Alpine.store('flibusta'));
+        });
+    </script>
+
+    <script defer src="{% static 'js/alpine.min.js' %}"></script>
+
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('{% static "sw.js" %}')
+                    .then((registration) => {
+                        console.log('✅ Service Worker зарегистрирован:', registration.scope);
+
+                        // Проверяем обновления каждые 60 секунд
+                        setInterval(() => {
+                            registration.update();
+                        }, 60000);
+
+                        // Обработка обновления Service Worker
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // Новая версия доступна
+                                    if (confirm('Доступна новая версия приложения. Обновить?')) {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.error('❌ Ошибка регистрации Service Worker:', error);
+                    });
+
+                // Перезагружаем страницу когда новый SW активируется
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!refreshing) {
+                        refreshing = true;
+                        window.location.reload();
+                    }
+                });
+            });
+
+            // Функция для кэширования книги для offline чтения
+            window.cacheBookForOffline = function(bookUrl) {
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'CACHE_BOOK',
+                        url: bookUrl
+                    });
+                }
+            };
+        }
+
+        // Обработка установки PWA
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+
+            // Показываем кнопку установки PWA (можно добавить в UI)
+            console.log('💡 PWA может быть установлено');
+
+            // Сохраняем промпт для последующего использования
+            window.showInstallPrompt = () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then((choiceResult) => {
+                        if (choiceResult.outcome === 'accepted') {
+                            console.log('✅ Пользователь установил PWA');
+                        }
+                        deferredPrompt = null;
+                    });
+                }
+            };
+        });
+
+        // Отслеживаем успешную установку PWA
+        window.addEventListener('appinstalled', () => {
+            console.log('✅ PWA успешно установлено');
+            deferredPrompt = null;
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

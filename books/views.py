@@ -1,183 +1,246 @@
-from django.shortcuts import get_object_or_404, render, redirect
+import os
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import HttpResponse
+from django.views.decorators.http import require_http_methods
+from django.core.files import File
+from django.db.models import Q
+from django.contrib import messages
 from django.utils import timezone
-from django.views import View
 from .models import Book
-from .services import flibusta_service, fb2_parser, reading_service
+from .services.flibusta_service import FlibustaService
+from .services.fb2_parser import FB2Parser
+from .services.reading_service import ReadingService
+from .utils import is_htmx
 
 
-def is_htmx(request):
-    return request.headers.get('HX-Request') == 'true'
+@require_http_methods(["GET"])
+def library_view(request):
+    books = Book.objects.all()
+    query = request.GET.get('q', '').strip()
+    flibusta_results = []
+    flibusta_error = None
+
+    if query:
+        books = books.filter(
+            Q(title__icontains=query) | Q(author__icontains=query)
+        )
+
+        if request.user.is_authenticated:
+            try:
+                service = FlibustaService()
+                flibusta_results = service.search(query)
+            except Exception as e:
+                flibusta_error = str(e)
+        else:
+            flibusta_error = 'Поиск на Флибусте доступен только для авторизованных пользователей'
+
+    context = {
+        'books': books,
+        'query': query,
+        'flibusta_results': flibusta_results,
+        'flibusta_error': flibusta_error,
+        'is_htmx': is_htmx(request)
+    }
+
+    if is_htmx(request):
+        if query:
+            return render(request, 'books/partials/search_results.html', context)
+        return render(request, 'books/partials/library_content.html', context)
+
+    return render(request, 'books/library.html', context)
 
 
-class IndexView(View):
-    def get(self, request):
-        books = Book.objects.all().order_by('-created_at')
+@require_http_methods(["GET"])
+def book_detail_view(request, book_id):
+    book = get_object_or_404(Book, id=book_id)
+    book.last_read = timezone.now()
+    book.save(update_fields=['last_read'])
+
+    try:
+        text = ReadingService.get_book_text(book_id)
         context = {
-            'books': books, 
-            'is_htmx': is_htmx(request),
-            'active_tab': 'library'
+            'book': book,
+            'text': text,
+            'is_htmx': is_htmx(request)
         }
-        if is_htmx(request):
-            return render(request, 'books/partials/library_content.html', context)
-        return render(request, 'books/index.html', context)
 
-
-class FavoritesView(View):
-    def get(self, request):
-        books = Book.objects.filter(is_favorite=True).order_by('-created_at')
-        context = {
-            'books': books, 
-            'is_htmx': is_htmx(request),
-            'active_tab': 'favorites'
-        }
-        if is_htmx(request):
-            return render(request, 'books/partials/favorites_content.html', context)
-        return render(request, 'books/favorites.html', context)
-
-
-
-
-class BookDetailView(View):
-    def get(self, request, pk):
-        book = get_object_or_404(Book, pk=pk)
-        
-        # Обновляем время последнего чтения
-        book.last_read_at = timezone.now()
-        book.save(update_fields=['last_read_at'])
-        
-        content = reading_service.get_book_content(book)
-        context = {
-            'book': book, 
-            'content': content, 
-            'is_htmx': is_htmx(request),
-            'hide_tabbar': True,
-            'active_tab': 'reading'
-        }
         if is_htmx(request):
             return render(request, 'books/partials/reader_content.html', context)
-        return render(request, 'books/book_detail.html', context)
+
+        return render(request, 'books/reader.html', context)
+    except Exception as e:
+        if is_htmx(request):
+            return HttpResponse(f'<div class="error text-red-400">{str(e)}</div>', status=400)
+        return render(request, 'books/error.html', {'error': str(e)})
 
 
-class LastReadRedirectView(View):
-    def get(self, request):
-        last_book = Book.objects.exclude(last_read_at__isnull=True).order_by('-last_read_at').first()
-        if last_book:
-            url = f"/book/{last_book.id}/"
-            if is_htmx(request):
-                response = HttpResponse(status=204)
-                response['HX-Location'] = url
-                return response
-            return redirect('books:book_detail', pk=last_book.id)
-        return redirect('books:index')
-
-
-class UpdateProgressView(View):
-    def post(self, request, pk):
-        book = get_object_or_404(Book, pk=pk)
-        try:
-            progress = max(0, min(100, int(request.POST.get('progress', 0))))
-        except (ValueError, TypeError):
-            progress = 0
-        book.reading_progress = progress
-        book.save(update_fields=['reading_progress'])
+@require_http_methods(["POST"])
+def update_progress_view(request, book_id):
+    try:
+        progress = request.POST.get('progress', 0)
+        ReadingService.update_progress(book_id, progress)
         return HttpResponse(status=204)
+    except Exception as e:
+        return HttpResponse(f'Error: {str(e)}', status=400)
 
 
-class LibrarySearchView(View):
-    def get(self, request):
-        query = request.GET.get('q', '').strip()
-        books = Book.objects.all().order_by('-created_at')
-        if query:
-            from django.db.models import Q
-            books = books.filter(Q(title__icontains=query) | Q(author__icontains=query))
-        context = {'books': books, 'query': query}
-        return render(request, 'books/partials/book_grid.html', context)
+@require_http_methods(["GET"])
+def search_view(request):
+    query = request.GET.get('q', '').strip()
+
+    if not query:
+        return render(request, 'books/partials/flibusta_results.html', {'results': []})
+
+    if not request.user.is_authenticated:
+        return render(request, 'books/partials/flibusta_results.html', {
+            'results': [],
+            'error': 'Поиск на Флибусте доступен только для авторизованных пользователей'
+        })
+
+    try:
+        service = FlibustaService()
+        results = service.search(query)
+        return render(request, 'books/partials/flibusta_results.html', {'results': results})
+    except Exception as e:
+        return render(request, 'books/partials/flibusta_results.html', {
+            'results': [],
+            'error': str(e)
+        })
 
 
-class SearchView(View):
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse(
-                '<div class="p-8 text-center glass rounded-3xl"><p class="text-white/40">Поиск по Флибусте доступен только авторизованным администраторам.</p></div>',
-                status=401
-            )
-        
-        query = request.GET.get('q', '').strip()
-        results = []
-        error = None
-        if query:
-            results = flibusta_service.search_books(query)
-            if results is None:
-                error = 'Не удалось подключиться к Флибусте. Убедитесь, что Tor запущен.'
-                results = []
-        context = {'results': results, 'query': query, 'error': error}
-        return render(request, 'books/partials/search_results.html', context)
+@require_http_methods(["POST"])
+def download_book_view(request):
+    if not request.user.is_authenticated:
+        return HttpResponse('<div class="error">Скачивание с Флибусты доступно только для авторизованных пользователей</div>', status=403)
+
+    book_id = request.POST.get('book_id')
+    title = request.POST.get('title', 'Без названия')
+    author = request.POST.get('author', 'Неизвестный автор')
+
+    if not book_id:
+        return HttpResponse('<div class="error">Не указан ID книги</div>', status=400)
+
+    try:
+        service = FlibustaService()
+        file_path = service.download_book(book_id)
+
+        parser = FB2Parser(file_path)
+        book_data = parser.parse()
+
+        book = Book()
+        book.title = book_data.get('title', title)
+        book.author = book_data.get('author', author)
+        book.flibusta_id = book_id
+
+        with open(file_path, 'rb') as f:
+            book.file.save(os.path.basename(file_path), File(f), save=False)
+
+        if book_data.get('cover'):
+            book.cover = book_data['cover']
+
+        book.save()
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        if is_htmx(request):
+            messages.success(request, f'Книга "{book.title}" успешно скачана')
+
+            books = Book.objects.all()
+            context = {
+                'books': books,
+                'query': '',
+                'flibusta_results': [],
+                'flibusta_error': None,
+                'is_htmx': True
+            }
+            return render(request, 'books/partials/library_content.html', context)
+
+        return HttpResponse('OK')
+
+    except Exception as e:
+        return HttpResponse(f'<div class="error">Ошибка: {str(e)}</div>', status=400)
 
 
-class DownloadView(View):
-    def post(self, request):
-        if not request.user.is_authenticated:
-            return HttpResponse('<p class="text-red-400 text-sm p-4">Авторизация обязательна</p>', status=401)
-            
-        flibusta_id = request.POST.get('flibusta_id', '').strip()
-        if not flibusta_id:
-            return HttpResponse('<p class="text-red-400 text-sm p-4">Не указан ID книги</p>', status=400)
+@require_http_methods(["DELETE", "POST"])
+def delete_book_view(request, book_id):
+    try:
+        book = get_object_or_404(Book, id=book_id)
 
-        book_file = flibusta_service.download_book(flibusta_id)
-        if not book_file:
-            return HttpResponse(
-                '<p class="text-red-400 text-sm p-4">Не удалось скачать книгу. Проверьте соединение с Tor.</p>',
-                status=500
-            )
-
-        metadata = fb2_parser.parse_metadata(book_file)
-        book = Book.objects.create(
-            title=metadata.get('title', 'Unknown Title'),
-            author=metadata.get('author', 'Unknown Author'),
-            flibusta_id=flibusta_id,
-        )
-        book.file.save(f'{book.id}.fb2', book_file)
-
-        if metadata.get('cover'):
-            cover_file = metadata['cover']
-            ext = 'jpg'
-            if hasattr(cover_file, 'name') and cover_file.name:
-                ext = cover_file.name.rsplit('.', 1)[-1]
-            book.cover.save(f'{book.id}_cover.{ext}', cover_file)
-
-        book.refresh_from_db()
-        
-        # Рендерим новую карточку книги
-        book_html = render(request, 'books/partials/book_card.html', {'book': book}).content.decode('utf-8')
-        
-        # OOB свап для кнопки "Скачать", чтобы превратить её в зелёную галочку "Скачано"
-        oob_btn = f'''
-        <button id="dl-btn-{flibusta_id}" hx-swap-oob="true" disabled
-                class="shrink-0 px-4 py-2 bg-green-600/50 rounded-xl text-xs font-semibold text-green-100 flex items-center gap-2 whitespace-nowrap cursor-default">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-            </svg>
-            Скачано
-        </button>
-        '''
-        
-        return HttpResponse(book_html + oob_btn, status=200)
-
-
-class DeleteBookView(View):
-    def delete(self, request, pk):
-        book = get_object_or_404(Book, pk=pk)
         if book.file:
-            book.file.delete(save=False)
+            if os.path.exists(book.file.path):
+                os.remove(book.file.path)
+
         if book.cover:
-            book.cover.delete(save=False)
+            if os.path.exists(book.cover.path):
+                os.remove(book.cover.path)
+
         book.delete()
-        return HttpResponse(status=200)
 
-class ToggleFavoriteView(View):
-    def post(self, request, pk):
-        book = get_object_or_404(Book, pk=pk)
-        book.is_favorite = not book.is_favorite
-        book.save(update_fields=['is_favorite'])
-        return render(request, 'books/partials/favorite_button.html', {'book': book})
+        if is_htmx(request):
+            messages.success(request, 'Книга удалена')
+            return HttpResponse('')
 
+        return HttpResponse('OK')
+    except Exception as e:
+        return HttpResponse(f'<div class="error">{str(e)}</div>', status=400)
+
+
+@require_http_methods(["GET"])
+def last_read_view(request):
+    last_book = Book.objects.filter(last_read__isnull=False).order_by('-last_read').first()
+
+    if not last_book:
+        first_book = Book.objects.first()
+        if first_book:
+            return redirect('books:book_detail', book_id=first_book.id)
+        else:
+            return redirect('books:library')
+
+    return redirect('books:book_detail', book_id=last_book.id)
+
+
+@require_http_methods(["GET"])
+def sitemap_view(request):
+    books = Book.objects.all()
+
+    sitemap_xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    sitemap_xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+
+    sitemap_xml += '  <url>\n'
+    sitemap_xml += f'    <loc>{request.scheme}://{request.get_host()}/</loc>\n'
+    sitemap_xml += '    <changefreq>daily</changefreq>\n'
+    sitemap_xml += '    <priority>1.0</priority>\n'
+    sitemap_xml += '  </url>\n'
+
+    for book in books:
+        sitemap_xml += '  <url>\n'
+        sitemap_xml += f'    <loc>{request.scheme}://{request.get_host()}/book/{book.id}/</loc>\n'
+        sitemap_xml += f'    <lastmod>{book.created_at.strftime("%Y-%m-%d")}</lastmod>\n'
+        sitemap_xml += '    <changefreq>monthly</changefreq>\n'
+        sitemap_xml += '    <priority>0.8</priority>\n'
+        sitemap_xml += '  </url>\n'
+
+    sitemap_xml += '</urlset>'
+
+    return HttpResponse(sitemap_xml, content_type='application/xml')
+
+
+@require_http_methods(["GET"])
+def robots_view(request):
+    robots_txt = f"""User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /book/*/delete/
+Disallow: /download/
+Disallow: /search/
+
+Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml
+"""
+    return HttpResponse(robots_txt, content_type='text/plain')
+
+
+@require_http_methods(["GET"])
+def offline_view(request):
+    """Страница для offline режима PWA"""
+    return render(request, 'books/offline.html')

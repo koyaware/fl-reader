@@ -1,59 +1,70 @@
-{% if error %}
-    <div class="flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
-        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z"/>
-        </svg>
-        {{ error }}
-    </div>
-{% elif not query %}
-    <p class="text-white/30 text-sm text-center py-4">Введите запрос для поиска на Флибусте</p>
-{% elif results %}
-    <div class="flex items-center justify-between mb-4 bg-[#0d0d0f] sticky top-0 py-2 z-10">
-        <p class="text-xs text-white/40 uppercase tracking-wider">Найдено: {{ results|length }}</p>
-        <button onclick="document.getElementById('flibusta-results').innerHTML = ''; document.getElementById('flibusta-search-form').reset();" 
-                class="text-xs font-medium bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-full text-white/60 hover:text-white transition-colors flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-            Очистить
-        </button>
-    </div>
-    <div class="space-y-2 max-h-96 overflow-y-auto pr-1">
-        {% for result in results %}
-        <div class="flex items-center justify-between gap-4 p-3 rounded-2xl glass hover:bg-white/5 transition-all group relative">
-            <div class="min-w-0 flex-1 relative z-10">
-                <p class="text-sm font-medium truncate text-white group-hover:text-blue-300 transition-colors" title="{{ result.title }}">{{ result.title }}</p>
-                <p class="text-xs text-white/40 truncate">{{ result.author }}</p>
-            </div>
-            <button id="dl-btn-{{ result.id }}"
-                    class="shrink-0 px-4 py-2 bg-blue-600/80 hover:bg-blue-500 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 whitespace-nowrap relative z-10"
-                    hx-post="{% url 'books:download' %}"
-                    hx-vals='{"flibusta_id": "{{ result.id }}"}'
-                    hx-target="#book-grid"
-                    hx-swap="afterbegin"
-                    hx-indicator="#indicator-{{ result.id }}"
-                    hx-disabled-elt="this">
-                <span id="indicator-{{ result.id }}" class="htmx-indicator">
-                    <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                </span>
-                <span class="[&.htmx-request]:hidden flex items-center gap-1.5">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                    </svg>
-                    Скачать
-                </span>
-            </button>
+{% if query %}
+    {% if books %}
+    <section class="mb-12">
+        <h2 class="text-lg font-semibold mb-6 opacity-60">Из вашей библиотеки</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-6 gap-y-10">
+            {% for book in books %}
+                {% include "books/partials/book_card.html" %}
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
-{% else %}
-    <div class="flex flex-col items-center py-8 opacity-40">
-        <svg class="w-10 h-10 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 3a9 9 0 100 18A9 9 0 0012 3z"/>
+    </section>
+    {% endif %}
+
+    {% if flibusta_results %}
+    <section>
+        <h2 class="text-lg font-semibold mb-6 opacity-60">Найдено на Флибусте</h2>
+        <div class="space-y-3">
+            {% for result in flibusta_results %}
+            <div class="glass-dark rounded-2xl p-4 hover:bg-white/5 transition-colors">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-semibold truncate mb-1">{{ result.title }}</h3>
+                        <p class="text-xs text-white/50 truncate">{{ result.author }}</p>
+                    </div>
+                    <button hx-post="{% url 'books:download' %}"
+                            hx-vals='{"book_id": "{{ result.id }}", "title": "{{ result.title|escapejs }}", "author": "{{ result.author|escapejs }}"}'
+                            hx-target="#search-results"
+                            hx-swap="innerHTML"
+                            hx-indicator="#download-spinner-{{ result.id }}"
+                            class="px-4 py-2 bg-blue-500/80 hover:bg-blue-500 rounded-full text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-2">
+                        <span>Скачать</span>
+                        <div id="download-spinner-{{ result.id }}" class="htmx-indicator">
+                            <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if flibusta_error %}
+    <section>
+        <div class="text-center py-8">
+            <div class="glass-dark rounded-2xl p-6 border border-yellow-500/30">
+                <svg class="w-12 h-12 mx-auto mb-3 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-sm text-yellow-400">Ошибка поиска на Флибусте</p>
+                <p class="text-xs text-white/40 mt-2">{{ flibusta_error }}</p>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if not books and not flibusta_results %}
+    <div class="flex flex-col items-center justify-center py-32 opacity-20">
+        <svg class="w-16 h-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <p class="text-sm">По запросу «{{ query }}» ничего не найдено</p>
+        <p class="text-lg">Ничего не найдено</p>
+        <p class="text-sm text-white/40 mt-2">Попробуйте изменить запрос</p>
     </div>
+    {% endif %}
+{% else %}
+    {% include "books/partials/book_grid.html" %}
 {% endif %}
